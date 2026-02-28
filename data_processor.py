@@ -17,8 +17,8 @@ def process_dispatch_data(file_obj):
         raise ValueError("不支持的文件格式，请上传 .csv, .xls 或 .xlsx 文件")
 
     # 读取表头（支持多行列头）
-    required_cols = ['派工数量', '加工工序', '合格数量']
-    optional_cols = ['订单主题', '订单编号', 'PDM图号', '产品名称']
+    required_cols = ['订单主题', '派工数量', '加工工序', '合格数量']
+    optional_cols = ['订单编号', 'PDM图号', '产品名称']
     all_cols = required_cols + optional_cols
 
     # 获取前两行

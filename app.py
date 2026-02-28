@@ -3,9 +3,15 @@ from datetime import datetime
 import pandas as pd
 import io
 import traceback
+import os
 
 # 导入处理函数
 from data_processor import process_dispatch_data
+
+# 读取处理规则说明
+PROMPT_PATH = os.path.join(os.path.dirname(__file__), '..', 'prompt.md')
+with open(PROMPT_PATH, 'r', encoding='utf-8') as f:
+    PROMPT_CONTENT = f.read()
 
 st.set_page_config(page_title="数据处理：派工进度", layout="wide")
 
@@ -26,7 +32,8 @@ st.title("数据处理：派工进度")
 
 st.markdown("""
 - 根据《派工进度追踪表》，计算各个零件的未入库情况。
-- 核心输出内容：PDM图号、物料描述、说明。
+- 上传的表格 **必须** 包含以下列：订单主题、派工数量、加工工序、合格数量。
+- 上传的表格 **可选** 包含以下列：订单编号、PDM图号、产品名称。
 """)
 
 st.subheader("上传文件")
@@ -87,3 +94,7 @@ if uploaded_file is not None:
             st.error(f'处理文件时发生错误：{e}')
             with st.expander("错误日志", expanded=True):
                 st.code(error_detail)
+
+# AI 提示词（页面底部）
+st.subheader("AI 提示词")
+st.code(PROMPT_CONTENT, language="markdown")
