@@ -15,4 +15,4 @@ streamlit run app.py
 - 上传 CSV/Excel 派工数据
 - 多行列头自动识别
 - 计算各工序待处理量
-- 输出 CSV 下载
+- 展示和下载数据处理结果

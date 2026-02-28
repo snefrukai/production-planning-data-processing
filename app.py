@@ -9,7 +9,7 @@ import os
 from data_processor import process_dispatch_data
 
 # 读取处理规则说明
-PROMPT_PATH = os.path.join(os.path.dirname(__file__), '..', 'prompt.md')
+PROMPT_PATH = os.path.join(os.path.dirname(__file__), 'prompt.md')
 with open(PROMPT_PATH, 'r', encoding='utf-8') as f:
     PROMPT_CONTENT = f.read()
 
