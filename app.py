@@ -59,24 +59,21 @@ if uploaded_file is not None:
             # 处理结果
             st.subheader("处理结果")
 
-            # 下载按钮（两个格式）
-            col1, col2 = st.columns(2)
-            # with col2:
-            #     st.download_button(
-            #         label="⬇️ 下载处理结果（.xlsx）",
-            #         data=xlsx_data,
-            #         file_name=f"派工进度追踪表_处理结果_{timestamp}.xlsx",
-            #         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            #     )
-            with col1:
-                st.download_button(
-                    label="⬇️ 下载处理结果（.csv）",
-                    data=csv_data,
-                    file_name=f"派工进度追踪表_处理结果_{timestamp}.csv",
-                    mime="text/csv"
-                )
+            # 下载处理结果
+            st.download_button(
+                label="⬇️ 下载处理结果（.xlsx）",
+                data=xlsx_data,
+                file_name=f"派工进度追踪表_处理结果_{timestamp}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            st.download_button(
+                label="⬇️ 下载处理结果（.csv）",
+                data=csv_data,
+                file_name=f"派工进度追踪表_处理结果_{timestamp}.csv",
+                mime="text/csv"
+            )
 
-            # 表格数据
+            # 显示表格数据
             st.dataframe(
                 df_result,
                 use_container_width=True,
