@@ -7,7 +7,7 @@ import sys
 # 添加script目录到路径
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
 
-from data_processor import process_dispatch_data
+from dispatch_processor import process_dispatch_data
 from datetime import datetime
 import pandas as pd
 import io

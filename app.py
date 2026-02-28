@@ -6,7 +6,7 @@ import traceback
 import os
 
 # 导入处理函数
-from data_processor import process_dispatch_data
+from dispatch_processor import process_dispatch_data
 
 # 读取处理规则说明
 PROMPT_PATH = os.path.join(os.path.dirname(__file__), 'prompt.md')
