@@ -166,7 +166,7 @@ def process_theme_group(
         'PDM图号': pdm,
         '物料描述': desc,
         'steps': steps,
-        '说明': "，".join(description_parts),
+        '派工说明': "，".join(description_parts),
     }
 
 
@@ -186,7 +186,7 @@ def build_output_dataframe(processed_themes: List[dict]) -> pd.DataFrame:
 
     for seq, theme_list in blocks.items():
         # 表头行
-        header = ['PDM图号', '物料描述', '说明', '订单主题', '订单编号']
+        header = ['PDM图号', '物料描述', '派工说明', '订单主题', '订单编号']
         for proc in seq:
             header.append(proc)
             header.append(f"待{proc}")
@@ -194,7 +194,7 @@ def build_output_dataframe(processed_themes: List[dict]) -> pd.DataFrame:
 
         # 数据行
         for t in theme_list:
-            row = [t['PDM图号'], t['物料描述'], t['说明'], t['订单主题'], t['订单编号']]
+            row = [t['PDM图号'], t['物料描述'], t['派工说明'], t['订单主题'], t['订单编号']]
             for step in t['steps']:
                 qual = step['qual']
                 row.append(int(qual) if isinstance(qual, float) and qual.is_integer() else qual)
