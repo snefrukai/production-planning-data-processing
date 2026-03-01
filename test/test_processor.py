@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'
 from dispatch_processor import process_dispatch_data
 
 # 测试文件目录
-TEST_INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
+TEST_INPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'input')
 
 
 class TestProcessDispatch:

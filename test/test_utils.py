@@ -17,7 +17,7 @@ class TestReadUploadedFile:
 
     def test_read_xls(self):
         """测试读取 .xls 文件"""
-        filepath = os.path.join(os.path.dirname(__file__), 'input', '派工进度追踪表_赵淑君.xls')
+        filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'input', '派工进度追踪表_赵淑君.xls')
 
         with open(filepath, 'rb') as f:
             df = read_uploaded_file(f)
@@ -27,7 +27,7 @@ class TestReadUploadedFile:
 
     def test_read_xlsx(self):
         """测试读取 .xlsx 文件"""
-        filepath = os.path.join(os.path.dirname(__file__), 'input', '派工进度追踪表_赵淑君 (1).xlsx')
+        filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'input', '派工进度追踪表_赵淑君 (1).xlsx')
 
         with open(filepath, 'rb') as f:
             df = read_uploaded_file(f)

@@ -15,7 +15,7 @@ pip install -r requirements.txt
 # 运行 Streamlit Web 界面
 streamlit run app.py
 
-# 本地批量处理命令行 (测试并处理 test/input/ 中的文件)
+# 本地批量处理命令行 (测试并处理 script/input/ 中的文件)
 python test/run_test.py
 
 # 运行自动化测试 (请确保安装了 pytest)

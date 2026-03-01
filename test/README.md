@@ -11,8 +11,7 @@
 
 ```text
 test/
-├── input/                  # 测试用的输入文件（.csv, .xls, .xlsx）
-├── test_processor.py       # 派工业务逻辑集成测试（依赖 input 文件夹内文件）
+├── test_processor.py       # 派工业务逻辑集成测试（依赖 ../input 文件夹内文件）
 ├── test_utils.py           # 公共函数测试（读取文件、清理数据、表头检测等）
 └── run_test.py             # 辅助脚本：提供控制台可视化的批量文件执行和预览。结果会输出到上级目录的 `output/` 中。
 ```
