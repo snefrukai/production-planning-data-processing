@@ -15,7 +15,7 @@ import traceback
 
 # 测试目录
 TEST_INPUT_DIR = os.path.join(os.path.dirname(__file__), 'input')
-TEST_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), 'output')
+TEST_OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'output')
 
 def main():
     # 确保输出目录存在

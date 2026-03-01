@@ -15,6 +15,9 @@ pip install -r requirements.txt
 # 运行 Streamlit Web 界面
 streamlit run app.py
 
+# 本地批量处理命令行 (测试并处理 test/input/ 中的文件)
+python test/run_test.py
+
 # 运行自动化测试 (请确保安装了 pytest)
 pytest test/ -v
 ```
@@ -22,13 +25,15 @@ pytest test/ -v
 ## 功能模块 (Tabs)
 
 ### 1. 派工进度分析
+
 - 上传《派工进度追踪表》（支持 CSV/Excel）
 - 自动识别多行列头
 - 计算各零件在各工艺路线工序中的**待处理量**
 - 展示处理结果，并支持下载修正过的 CSV 和 XLSX 报表
 
 ### 2. 库存分析
-- *(规划中：用于对比派工加工需求与当前库存的差异，制定后续生产计划。)*
+
+- _(规划中：用于对比派工加工需求与当前库存的差异，制定后续生产计划。)_
 
 ## 代码结构说明
 

@@ -10,6 +10,7 @@ from typing import IO, Dict, List, Tuple
 import pandas as pd
 
 from utils import read_uploaded_file, detect_headers, clean_numeric_column
+from models import PartDispatchResult, ProcessStep
 
 
 # ---------------------------------------------------------------------------
@@ -106,12 +107,12 @@ def process_theme_group(
     theme_group: pd.DataFrame,
     col_idx: Dict[str, int],
     theme_value: str,
-) -> dict | None:
+) -> PartDispatchResult | None:
     """
     处理一个"订单主题"分组，计算各工序的待处理量。
 
     Returns:
-        包含 PDM、描述、工序步骤等信息的字典；如果无有效工序则返回 None。
+        包含 PDM、描述、工序步骤等信息的 PartDispatchResult；如果无有效工序则返回 None。
     """
     proc_col = col_idx['加工工序']
     qty_col = col_idx['派工数量']
@@ -146,7 +147,7 @@ def process_theme_group(
     proc_sums = full_process_list.groupby(proc_col)[qual_col].sum()
 
     # 计算各工序待处理量
-    steps: List[dict] = []
+    steps: List[ProcessStep] = []
     description_parts: List[str] = []
     prev_val = total_dispatch
 
@@ -155,31 +156,31 @@ def process_theme_group(
         backlog = (total_dispatch - total_qual) if i == 0 else (prev_val - total_qual)
         backlog = max(0, round(backlog, 0))
 
-        steps.append({'name': proc, 'qual': total_qual, 'pending': backlog})
+        steps.append(ProcessStep(name=proc, qualified=total_qual, pending=backlog))
         if backlog > 0:
             description_parts.append(f"待{proc}：{int(backlog)}")
         prev_val = total_qual
 
-    return {
-        '订单编号': order_ids,
-        '订单主题': theme_value if '订单主题' in col_idx else "",
-        'PDM图号': pdm,
-        '物料描述': desc,
-        'steps': steps,
-        '派工说明': "，".join(description_parts),
-    }
+    return PartDispatchResult(
+        order_id=order_ids,
+        order_theme=theme_value if '订单主题' in col_idx else "",
+        pdm=pdm,
+        description=desc,
+        steps=steps,
+        dispatch_note="，".join(description_parts),
+    )
 
 
-def build_output_dataframe(processed_themes: List[dict]) -> pd.DataFrame:
+def build_output_dataframe(processed_themes: List[PartDispatchResult]) -> pd.DataFrame:
     """
     将处理后的主题列表按工艺路线分组，构建带动态表头的输出 DataFrame。
 
     相同工序序列的主题共享一组表头，不同序列之间以空行分隔。
     """
     # 按工序序列分组
-    blocks: Dict[tuple, List[dict]] = {}
+    blocks: Dict[tuple, List[PartDispatchResult]] = {}
     for theme_result in processed_themes:
-        seq_key = tuple(step['name'] for step in theme_result['steps'])
+        seq_key = tuple(step.name for step in theme_result.steps)
         blocks.setdefault(seq_key, []).append(theme_result)
 
     all_rows: List[list] = []
@@ -194,11 +195,11 @@ def build_output_dataframe(processed_themes: List[dict]) -> pd.DataFrame:
 
         # 数据行
         for t in theme_list:
-            row = [t['PDM图号'], t['物料描述'], t['派工说明'], t['订单主题'], t['订单编号']]
-            for step in t['steps']:
-                qual = step['qual']
+            row = [t.pdm, t.description, t.dispatch_note, t.order_theme, t.order_id]
+            for step in t.steps:
+                qual = step.qualified
                 row.append(int(qual) if isinstance(qual, float) and qual.is_integer() else qual)
-                row.append(int(step['pending']))
+                row.append(int(step.pending))
             all_rows.append(row)
 
         # 空行（区块分隔）
@@ -243,7 +244,7 @@ def process_dispatch_data(file_obj: IO) -> Tuple[bytes, bytes]:
     else:
         themes = data.index.unique()
 
-    processed_themes: List[dict] = []
+    processed_themes: List[PartDispatchResult] = []
     for theme in themes:
         if '订单主题' in col_idx:
             theme_group = data[data[col_idx['订单主题']] == theme]
