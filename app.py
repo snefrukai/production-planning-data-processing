@@ -1,22 +1,24 @@
-import streamlit as st
-from datetime import datetime
-import pandas as pd
 import io
-import traceback
 import os
+import traceback
+from datetime import datetime
+
+import pandas as pd
+import streamlit as st
 
 # 导入处理函数
 from dispatch_processor import process_dispatch_data
 
 # 读取处理规则说明
-PROMPT_PATH = os.path.join(os.path.dirname(__file__), 'prompt.md')
-with open(PROMPT_PATH, 'r', encoding='utf-8') as f:
+PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompt.md")
+with open(PROMPT_PATH, encoding="utf-8") as f:
     PROMPT_CONTENT = f.read()
 
 st.set_page_config(page_title="数据分析：生产计划", layout="wide")
 
 # CSS禁用表格列排序
-st.markdown("""
+st.markdown(
+    """
     <style>
     [data-testid="stTableColumnHeader"] {
         pointer-events: none;
@@ -26,7 +28,9 @@ st.markdown("""
         width: 500px;
     }
     </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 st.title("数据分析：生产计划")
 
@@ -53,15 +57,11 @@ with tab1:
                 xlsx_data, csv_data = process_dispatch_data(uploaded_file)
 
                 # 将XLSX字节流转为DataFrame用于展示，保留空行
-                df_result = pd.read_excel(
-                    io.BytesIO(xlsx_data),
-                    header=None,
-                    keep_default_na=False
-                )
+                df_result = pd.read_excel(io.BytesIO(xlsx_data), header=None, keep_default_na=False)
 
                 # 设置自定义列名
                 num_cols = df_result.shape[1]
-                custom_headers = [f"列{i+1}" for i in range(num_cols)]
+                custom_headers = [f"列{i + 1}" for i in range(num_cols)]
                 df_result.columns = custom_headers
 
                 timestamp = datetime.now().strftime("%m%d%H%M")
@@ -75,27 +75,21 @@ with tab1:
                     label="⬇️ 下载处理结果（.xlsx）",
                     data=xlsx_data,
                     file_name=f"派工进度追踪表_处理结果_{timestamp}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 )
                 st.download_button(
                     label="⬇️ 下载处理结果（.csv）",
                     data=csv_data,
                     file_name=f"派工进度追踪表_处理结果_{timestamp}.csv",
-                    mime="text/csv"
+                    mime="text/csv",
                 )
 
                 # 显示表格数据
-                st.dataframe(
-                    df_result,
-                    use_container_width=True,
-                    hide_index=True,
-                    height=600
-                )
-
+                st.dataframe(df_result, use_container_width=True, hide_index=True, height=600)
 
             except Exception as e:
                 error_detail = traceback.format_exc()
-                st.error(f'处理文件时发生错误：{e}')
+                st.error(f"处理文件时发生错误：{e}")
                 with st.expander("错误日志", expanded=True):
                     st.code(error_detail)
 
