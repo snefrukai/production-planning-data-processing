@@ -121,10 +121,11 @@ class TestOutputValidation:
         # 找到说明列索引
         note_idx = header_row.index("派工说明")
 
-        # 检查说明格式 (如: "待落料：15164" 或 "待三价彩锌：21000")
+        # 检查说明格式 (如: "DD_20260209001: 待三价彩锌 6000" 或 "待落料：15164")
         import re
 
-        pattern = r"^待.+：\d+$"
+        # 新格式: "{订单编号}: 待{工序} {数量}" 或 旧格式: "待{工序}：{数量}"
+        pattern = r"^(.+: 待.+ \d+|待.+：\d+)(，(.+: 待.+ \d+|待.+：\d+))*$"
 
         for idx in range(header_idx + 1, len(df)):
             row = df.iloc[idx]

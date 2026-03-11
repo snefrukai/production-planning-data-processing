@@ -161,20 +161,44 @@ def process_theme_group(
 
     proc_sums = full_process_list.groupby(proc_col)[qual_col].sum()
 
-    # 计算各工序待处理量
+    # 计算各工序待处理量（汇总级别，用于输出列）
     steps: list[ProcessStep] = []
-    description_parts: list[str] = []
     prev_val = total_dispatch
 
     for i, proc in enumerate(unique_procs):
         total_qual = proc_sums.get(proc, 0.0)
         backlog = (total_dispatch - total_qual) if i == 0 else (prev_val - total_qual)
         backlog = max(0, round(backlog, 0))
-
         steps.append(ProcessStep(name=proc, qualified=total_qual, pending=backlog))
-        if backlog > 0:
-            description_parts.append(f"待{proc}：{int(backlog)}")
         prev_val = total_qual
+
+    # 构建派工说明：按订单编号逐条列出待处理工序
+    description_parts: list[str] = []
+    if "订单编号" in col_idx:
+        order_col = col_idx["订单编号"]
+        for oid in theme_group[order_col].unique():
+            oid_str = str(oid).strip()
+            if not oid_str or oid_str == "nan":
+                continue
+            order_rows = theme_group[theme_group[order_col] == oid]
+            order_dispatch = order_rows[order_rows[proc_col] == "【自制】"][qty_col].sum()
+            order_procs = order_rows[order_rows[proc_col] != "【自制】"]
+            if order_procs.empty:
+                continue
+            order_proc_sums = order_procs.groupby(proc_col)[qual_col].sum()
+            prev = order_dispatch
+            for j, proc in enumerate(unique_procs):
+                qual = order_proc_sums.get(proc, 0.0)
+                bl = (order_dispatch - qual) if j == 0 else (prev - qual)
+                bl = max(0, round(bl, 0))
+                if bl > 0:
+                    description_parts.append(f"{oid_str}: 待{proc} {int(bl)}")
+                prev = qual
+    else:
+        # 无订单编号列时，回退到原始汇总格式
+        for step in steps:
+            if step.pending > 0:
+                description_parts.append(f"待{step.name}：{int(step.pending)}")
 
     return PartDispatchResult(
         order_id=order_ids,
