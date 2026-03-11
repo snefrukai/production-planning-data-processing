@@ -172,8 +172,14 @@ def process_theme_group(
         steps.append(ProcessStep(name=proc, qualified=total_qual, pending=backlog))
         prev_val = total_qual
 
-    # 构建派工说明：按订单编号逐条列出待处理工序
-    description_parts: list[str] = []
+    # 构建派工说明（汇总）
+    summary_parts: list[str] = []
+    for step in steps:
+        if step.pending > 0:
+            summary_parts.append(f"待{step.name}：{int(step.pending)}")
+
+    # 构建详细派工说明：按订单编号逐条列出待处理工序
+    detail_parts: list[str] = []
     if "订单编号" in col_idx:
         order_col = col_idx["订单编号"]
         for oid in theme_group[order_col].unique():
@@ -192,13 +198,8 @@ def process_theme_group(
                 bl = (order_dispatch - qual) if j == 0 else (prev - qual)
                 bl = max(0, round(bl, 0))
                 if bl > 0:
-                    description_parts.append(f"{oid_str}: 待{proc} {int(bl)}")
+                    detail_parts.append(f"{oid_str}: 待{proc} {int(bl)}")
                 prev = qual
-    else:
-        # 无订单编号列时，回退到原始汇总格式
-        for step in steps:
-            if step.pending > 0:
-                description_parts.append(f"待{step.name}：{int(step.pending)}")
 
     return PartDispatchResult(
         order_id=order_ids,
@@ -206,7 +207,8 @@ def process_theme_group(
         pdm=pdm,
         description=desc,
         steps=steps,
-        dispatch_note="，".join(description_parts),
+        dispatch_note="，".join(summary_parts),
+        dispatch_note_detail="，".join(detail_parts),
     )
 
 
@@ -231,7 +233,7 @@ def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.Dat
 
     for seq, theme_list in blocks.items():
         # 表头行
-        header: list[str | int] = ["PDM图号", "物料描述", "派工说明", "订单主题", "订单编号"]
+        header: list[str | int] = ["PDM图号", "物料描述", "派工说明", "详细派工说明", "订单主题", "订单编号"]
         for proc in seq:
             header.append(proc)
             header.append(f"待{proc}")
@@ -239,7 +241,14 @@ def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.Dat
 
         # 数据行
         for t in theme_list:
-            row: list[str | int] = [t.pdm, t.description, t.dispatch_note, t.order_theme, t.order_id]
+            row: list[str | int] = [
+                t.pdm,
+                t.description,
+                t.dispatch_note,
+                t.dispatch_note_detail,
+                t.order_theme,
+                t.order_id,
+            ]
             for step in t.steps:
                 qual = step.qualified
                 row.append(int(qual) if isinstance(qual, float) and qual.is_integer() else qual)  # type: ignore[arg-type]

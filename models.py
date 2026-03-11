@@ -29,12 +29,13 @@ class ProcessStep:
 
 @dataclass
 class PartDispatchResult:
-    """Aggegrated processing result for a single part dispatch item.
+    """Aggregated processing result for a single part dispatch item.
 
     Attributes:
         pdm: PDM图号 (如: "36651H52100")
         description: 物料描述 (如: "导线夹")
-        dispatch_note: 派工说明 (如: "待三价彩锌：6000")
+        dispatch_note: 派工说明（汇总） (如: "待三价彩锌：6000")
+        dispatch_note_detail: 详细派工说明（按订单编号分列）
         order_id: 订单编号
         order_theme: 订单主题
         steps: 当前零件的所有工序列表
@@ -43,6 +44,7 @@ class PartDispatchResult:
     pdm: str
     description: str
     dispatch_note: str
+    dispatch_note_detail: str
     order_id: str
     order_theme: str
     steps: list[ProcessStep]
