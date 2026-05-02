@@ -37,7 +37,12 @@ def main() -> None:
 
         try:
             with open(input_path, "rb") as f:
-                xlsx_data, csv_data = process_dispatch_data(f)
+                xlsx_data, csv_data, validation_warnings = process_dispatch_data(f)
+
+            if validation_warnings:
+                print("  -> 数据校验提示:")
+                for warning in validation_warnings:
+                    print(f"     - {warning}")
 
             # 保存结果
             timestamp = datetime.now().strftime("%m%d%H%M%S")

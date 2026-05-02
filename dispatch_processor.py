@@ -5,6 +5,7 @@
 """
 
 import io
+import logging
 import re
 from typing import IO
 
@@ -20,8 +21,9 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------
-REQUIRED_COLS = ["订单主题", "派工数量", "加工工序", "合格数量"]
-OPTIONAL_COLS = ["订单编号", "派工主题", "PDM图号", "产品名称", "产品型号"]
+REQUIRED_COLS = ["订单主题", "派工主题", "产品型号", "派工数量", "加工工序", "合格数量"]
+OPTIONAL_COLS = ["产品名称"]
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -122,10 +124,18 @@ def _resolve_pdm_and_desc(
     return pdm, desc
 
 
-def _normalize_order_id(value: object) -> str:
-    """从派工主题或订单编号中提取用于输出的订单编号。"""
+def _clean_text(value: object) -> str:
+    """将单元格值转为去空格文本，过滤 pandas 空值。"""
+    if pd.isna(value):
+        return ""
     text = str(value).strip()
-    if not text or text == "nan":
+    return "" if text == "nan" else text
+
+
+def _normalize_order_id(value: object) -> str:
+    """从派工主题中提取用于展示的派工序列。"""
+    text = _clean_text(value)
+    if not text:
         return ""
 
     match = re.search(r"DD_[A-Za-z0-9]+", text)
@@ -133,12 +143,96 @@ def _normalize_order_id(value: object) -> str:
 
 
 def _resolve_order_col(col_idx: dict[str, int]) -> int | None:
-    """订单编号优先来自派工主题，兼容旧文件的订单编号列。"""
+    """派工主题来自独立的派工主题列。"""
     if "派工主题" in col_idx:
         return col_idx["派工主题"]
-    if "订单编号" in col_idx:
-        return col_idx["订单编号"]
     return None
+
+
+def _resolve_row_product(row: pd.Series, col_idx: dict[str, int]) -> tuple[str, str]:
+    """从单行数据中解析唯一产品键：(图号, 产品名称)。"""
+    theme_value = _clean_text(row[col_idx["订单主题"]]) if "订单主题" in col_idx else ""
+
+    pdm = ""
+    if "产品型号" in col_idx:
+        pdm = _clean_text(row[col_idx["产品型号"]])
+
+    desc = _clean_text(row[col_idx["产品名称"]]) if "产品名称" in col_idx else ""
+
+    if (not pdm or not desc) and theme_value:
+        parsed_pdm, parsed_desc = parse_theme(theme_value)
+        pdm = pdm or parsed_pdm
+        desc = desc or parsed_desc
+
+    if not pdm and not desc:
+        desc = theme_value or str(row.name)
+
+    return pdm, desc
+
+
+def _format_product_label(product_key: tuple[str, str]) -> str:
+    """将产品键格式化为用户可读的提示文本。"""
+    pdm, desc = product_key
+    if pdm and desc:
+        return f"{desc}（{pdm}）"
+    return desc or pdm
+
+
+def _unique_clean_values(series: pd.Series) -> list[str]:
+    """按出现顺序返回非空去重文本。"""
+    values: list[str] = []
+    for value in series.tolist():
+        text = _clean_text(value)
+        if text and text not in values:
+            values.append(text)
+    return values
+
+
+def _collect_product_group_indices(data: pd.DataFrame, col_idx: dict[str, int]) -> dict[str, list[object]]:
+    """按产品型号收集原始行索引，保留源文件出现顺序。"""
+    product_groups: dict[str, list[object]] = {}
+    for row_index, row in data.iterrows():
+        product_model, desc = _resolve_row_product(row, col_idx)
+        product_key = product_model or desc or str(row_index)
+        product_groups.setdefault(product_key, []).append(row_index)
+    return product_groups
+
+
+def _resolve_group_theme_value(product_group: pd.DataFrame, col_idx: dict[str, int], product_model: str) -> str:
+    """为兼容旧文件 fallback 保留主题文本；输出不再展示订单主题。"""
+    if "订单主题" in col_idx:
+        themes = _unique_clean_values(product_group[col_idx["订单主题"]])
+        if themes:
+            return " / ".join(themes)
+    return product_model
+
+
+def validate_dispatch_product_name_conflicts(data: pd.DataFrame, col_idx: dict[str, int]) -> list[str]:
+    """校验是否存在同一派工主题对应多个产品。"""
+    order_col = _resolve_order_col(col_idx)
+    if order_col is None:
+        return []
+
+    order_to_products: dict[str, list[tuple[str, str]]] = {}
+    for _, row in data.iterrows():
+        order_id = _normalize_order_id(row[order_col])
+        product_key = _resolve_row_product(row, col_idx)
+        if not order_id or not _format_product_label(product_key):
+            continue
+        products = order_to_products.setdefault(order_id, [])
+        if product_key not in products:
+            products.append(product_key)
+
+    warnings: list[str] = []
+    for order_id, product_keys in order_to_products.items():
+        if len(product_keys) <= 1:
+            continue
+        products_text = "、".join(_format_product_label(product_key) for product_key in product_keys)
+        warning = f"同一派工主题 {order_id} 对应了多个产品型号：{products_text}。系统会按产品型号分开处理，请复核源表数据。"
+        logger.warning("数据校验提示：%s", warning)
+        warnings.append(warning)
+
+    return warnings
 
 
 def process_theme_group(
@@ -146,12 +240,12 @@ def process_theme_group(
     col_idx: dict[str, int],
     theme_value: str,
 ) -> PartDispatchResult | None:
-    """处理一个"订单主题"分组，计算各工序的待处理量。
+    """处理一个产品型号分组，计算各工序的待处理量。
 
     Args:
         theme_group: 需要处理的数据块 DataFrame.
         col_idx: 表头列名到列索引的映射表.
-        theme_value: 当前订单主题名称.
+        theme_value: 当前产品型号关联的订单主题文本，仅用于兼容 fallback.
 
     Returns:
         包含 PDM、描述、工序步骤等信息的 PartDispatchResult；如果无有效工序则返回 None.
@@ -160,15 +254,17 @@ def process_theme_group(
     qty_col = col_idx["派工数量"]
     qual_col = col_idx["合格数量"]
 
-    # 订单编号（可选）：新文件从“派工主题”获取，旧文件兼容“订单编号”
+    # 派工主题是独立字段，不从订单主题或订单编号兼容读取
     order_col = _resolve_order_col(col_idx)
-    order_ids = (
-        " / ".join(order_id for order_id in (_normalize_order_id(v) for v in theme_group[order_col].unique()) if order_id)
-        if order_col is not None
-        else ""
-    )
+    order_id_list: list[str] = []
+    if order_col is not None:
+        for value in theme_group[order_col].unique():
+            order_id = _normalize_order_id(value)
+            if order_id and order_id not in order_id_list:
+                order_id_list.append(order_id)
+    order_ids = " / ".join(order_id_list)
 
-    # PDM 图号 & 物料描述
+    # 产品型号 & 产品名称
     pdm, desc = _resolve_pdm_and_desc(theme_group, col_idx, theme_value)
 
     # 总派工量 = 所有【自制】行的派工数量之和
@@ -182,8 +278,8 @@ def process_theme_group(
     # 保持工序出现顺序
     unique_procs: list[str] = []
     for p in full_process_list[proc_col].tolist():
-        p = str(p).strip()
-        if p not in unique_procs:
+        p = _clean_text(p)
+        if p and p not in unique_procs:
             unique_procs.append(p)
 
     proc_sums = full_process_list.groupby(proc_col)[qual_col].sum()
@@ -205,22 +301,26 @@ def process_theme_group(
         if step.pending > 0:
             summary_parts.append(f"待{step.name}：{int(step.pending)}")
 
-    # 构建详细派工说明：按订单编号逐条列出待处理工序
+    # 构建详细派工说明：按派工主题逐条列出待处理工序
     detail_parts: list[str] = []
     in_progress_total = 0
     if order_col is not None:
-        for oid in theme_group[order_col].unique():
-            oid_str = _normalize_order_id(oid)
-            if not oid_str:
-                continue
-            order_rows = theme_group[theme_group[order_col] == oid]
+        for oid_str in order_id_list:
+            order_rows = theme_group[theme_group[order_col].map(_normalize_order_id) == oid_str]
             order_dispatch = order_rows[order_rows[proc_col] == "【自制】"][qty_col].sum()
             order_procs = order_rows[order_rows[proc_col] != "【自制】"]
             if order_procs.empty:
                 continue
             order_proc_sums = order_procs.groupby(proc_col)[qual_col].sum()
             prev = order_dispatch
-            for j, proc in enumerate(unique_procs):
+
+            order_proc_sequence: list[str] = []
+            for proc_value in order_procs[proc_col].tolist():
+                proc_name = _clean_text(proc_value)
+                if proc_name and proc_name not in order_proc_sequence:
+                    order_proc_sequence.append(proc_name)
+
+            for j, proc in enumerate(order_proc_sequence):
                 qual = order_proc_sums.get(proc, 0.0)
                 bl = (order_dispatch - qual) if j == 0 else (prev - qual)
                 bl = max(0, round(bl, 0))
@@ -242,48 +342,47 @@ def process_theme_group(
 
 
 def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.DataFrame:
-    """将处理后的主题列表按工艺路线分组，构建带动态表头的输出 DataFrame。
+    """将处理后的产品型号列表构建为带动态表头的输出 DataFrame。
 
-    相同工序序列的主题共享一组表头，不同序列之间以空行分隔。
+    每个产品型号独立一个区块，共享该产品型号对应工序的表头。
 
     Args:
-        processed_themes: 按订单分组处理好的 PartDispatchResult 对象列表.
+        processed_themes: 按产品型号分组处理好的 PartDispatchResult 对象列表.
 
     Returns:
         生成的用于进一步导出 CSV 和 Excel 的 DataFrame 结构.
     """
-    # 按工序序列分组
-    blocks: dict[tuple[str, ...], list[PartDispatchResult]] = {}
-    for theme_result in processed_themes:
-        seq_key = tuple(step.name for step in theme_result.steps)
-        blocks.setdefault(seq_key, []).append(theme_result)
-
     all_rows: list[list[str | int]] = []
 
-    for seq, theme_list in blocks.items():
+    for t in processed_themes:
         # 表头行
-        header: list[str | int] = ["PDM图号", "物料描述", "在制汇总", "派工说明", "详细派工说明", "订单主题", "订单编号"]
-        for proc in seq:
-            header.append(proc)
-            header.append(f"待{proc}")
+        header: list[str | int] = [
+            "产品型号",
+            "产品名称",
+            "在制汇总",
+            "派工说明",
+            "详细派工说明",
+            "派工主题",
+        ]
+        for step in t.steps:
+            header.append(step.name)
+            header.append(f"待{step.name}")
         all_rows.append(header)
 
         # 数据行
-        for t in theme_list:
-            row: list[str | int] = [
-                t.pdm,
-                t.description,
-                t.in_progress_total,
-                t.dispatch_note,
-                t.dispatch_note_detail,
-                t.order_theme,
-                t.order_id,
-            ]
-            for step in t.steps:
-                qual = step.qualified
-                row.append(int(qual) if isinstance(qual, float) and qual.is_integer() else qual)  # type: ignore[arg-type]
-                row.append(step.pending)  # type: ignore[arg-type]
-            all_rows.append(row)
+        row: list[str | int] = [
+            t.pdm,
+            t.description,
+            t.in_progress_total,
+            t.dispatch_note,
+            t.dispatch_note_detail,
+            t.order_id,
+        ]
+        for step in t.steps:
+            qual = step.qualified
+            row.append(int(qual) if isinstance(qual, float) and qual.is_integer() else qual)  # type: ignore[arg-type]
+            row.append(step.pending)  # type: ignore[arg-type]
+        all_rows.append(row)
 
         # 空行（区块分隔）
         all_rows.append([""] * len(header))
@@ -296,7 +395,7 @@ def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.Dat
 # ---------------------------------------------------------------------------
 
 
-def process_dispatch_data(file_obj: IO[bytes]) -> tuple[bytes, bytes]:
+def process_dispatch_data(file_obj: IO[bytes]) -> tuple[bytes, bytes, list[str]]:
     """处理派工进度数据的主入口。
 
     读取上传的文件，识别表头，清洗并按订单和工序提取待加工作业，
@@ -309,6 +408,7 @@ def process_dispatch_data(file_obj: IO[bytes]) -> tuple[bytes, bytes]:
         A tuple containing:
         - xlsx_data: 格式化后的 Excel 字节流.
         - csv_data: UTF-8-SIG 编码的 CSV 字节流.
+        - validation_warnings: 处理前置校验提示文案列表.
 
     Raises:
         ValueError: 当上传不受支持的文件格式，或缺少必需列时触发.
@@ -324,51 +424,55 @@ def process_dispatch_data(file_obj: IO[bytes]) -> tuple[bytes, bytes]:
     # 2. 识别表头
     col_idx, data_start_row = detect_headers(df, REQUIRED_COLS, OPTIONAL_COLS)
 
-    # 3. 向下填充（订单主题、订单编号/派工主题）
-    for col_name in ("订单主题", "订单编号", "派工主题"):
-        if col_name in col_idx:
-            df[col_idx[col_name]] = df[col_idx[col_name]].ffill()
-
-    # 4. 提取数据行 & 数值清洗
+    # 3. 提取数据行
     data = df.iloc[data_start_row:].copy()
     if data.empty:
         raise ValueError("文件中没有检测到有效的数据行，请确保表头下方存在派工数据。")
 
+    # 4. 向下填充订单和产品字段，使合并单元格下的工序行也保留所属信息
+    for col_name in ("订单主题", "派工主题", "产品名称", "产品型号"):
+        if col_name in col_idx:
+            data.loc[:, col_idx[col_name]] = data[col_idx[col_name]].ffill()
+
+    # 5. 前置校验
+    validation_warnings = validate_dispatch_product_name_conflicts(data, col_idx)
+
+    # 6. 数值清洗
     try:
         data[col_idx["派工数量"]] = clean_numeric_column(data[col_idx["派工数量"]])
         data[col_idx["合格数量"]] = clean_numeric_column(data[col_idx["合格数量"]])
     except Exception as e:
         raise ValueError(f"清洗数值列失败: {str(e)}") from e
 
-    # 5. 按订单主题分组处理
-    themes = data[col_idx["订单主题"]].unique() if "订单主题" in col_idx else data.index.unique()
-
+    # 7. 按产品型号分组处理。同一产品型号的不同派工主题汇总到同一个输出区块。
+    product_groups = _collect_product_group_indices(data, col_idx)
     processed_themes: list[PartDispatchResult] = []
-    for theme in themes:
-        theme_group = data[data[col_idx["订单主题"]] == theme] if "订单主题" in col_idx else data
+    for product_model, row_indices in product_groups.items():
+        theme_group = data.loc[row_indices]
+        theme_value = _resolve_group_theme_value(theme_group, col_idx, product_model)
 
-        result = process_theme_group(theme_group, col_idx, str(theme))
+        result = process_theme_group(theme_group, col_idx, theme_value)
         if result is not None:
             processed_themes.append(result)
 
     if not processed_themes:
         raise ValueError("未能从文件中解析出任何有效的自制排活工序，请检查【自制】行数据及其后继工序是否完整。")
 
-    # 6. 构建输出
+    # 8. 构建输出
     try:
         df_output = build_output_dataframe(processed_themes)
     except Exception as e:
         raise RuntimeError(f"构建导出数据表时发生内部错误: {str(e)}") from e
 
-    # 7. 导出 XLSX
+    # 9. 导出 XLSX
     xlsx_buffer = io.BytesIO()
     with pd.ExcelWriter(xlsx_buffer, engine="openpyxl") as writer:
         df_output.to_excel(writer, index=False, header=False)
     xlsx_data = xlsx_buffer.getvalue()
 
-    # 8. 导出 CSV
+    # 10. 导出 CSV
     csv_buffer = io.StringIO()
     df_output.to_csv(csv_buffer, index=False, header=False, encoding="utf-8-sig")
     csv_data = csv_buffer.getvalue().encode("utf-8-sig")
 
-    return xlsx_data, csv_data
+    return xlsx_data, csv_data, validation_warnings

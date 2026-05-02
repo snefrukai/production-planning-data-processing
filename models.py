@@ -14,7 +14,7 @@ __all__ = [
 
 @dataclass
 class ProcessStep:
-    """Represents a single production or processing step for a part.
+    """单个生产工序的计算结果。
 
     Attributes:
         name: 工序名称 (如: "氩焊钢丝")
@@ -29,16 +29,16 @@ class ProcessStep:
 
 @dataclass
 class PartDispatchResult:
-    """Aggregated processing result for a single part dispatch item.
+    """单个产品型号的在制分析结果。
 
     Attributes:
-        pdm: PDM图号 (如: "36651H52100")
-        description: 物料描述 (如: "导线夹")
+        pdm: 产品型号 (如: "36651H52100")
+        description: 产品名称 (如: "导线夹")
         dispatch_note: 派工说明（汇总） (如: "待三价彩锌：6000")
-        dispatch_note_detail: 详细派工说明（按订单编号分列）
+        dispatch_note_detail: 详细派工说明（按派工主题分列）
         in_progress_total: 在制汇总（详细派工说明中的数量合计）
-        order_id: 订单编号
-        order_theme: 订单主题
+        order_id: 派工主题
+        order_theme: 兼容字段，当前输出不展示
         steps: 当前零件的所有工序列表
     """
 

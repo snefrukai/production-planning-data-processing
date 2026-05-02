@@ -9,8 +9,8 @@ import streamlit as st
 # 导入处理函数
 from dispatch_processor import process_dispatch_data
 
-# 读取处理规则说明
-PROMPT_PATH = os.path.join(os.path.dirname(__file__), "prompt.md")
+# 读取输出标准说明
+PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "docs", "输出标准.md")
 with open(PROMPT_PATH, encoding="utf-8") as f:
     PROMPT_CONTENT = f.read()
 
@@ -34,14 +34,13 @@ st.markdown(
 
 st.title("数据分析：生产计划")
 
-tab1, tab2 = st.tabs(["派工进度分析", "库存分析"])
+tab1, tab2 = st.tabs(["在制分析", "库存分析"])
 
 with tab1:
     st.subheader("功能说明")
     st.markdown("""
-    - 根据《派工进度追踪表》，计算各个零件的未入库情况。
-    - 上传的表格 **必须** 包含以下列：订单主题、派工数量、加工工序、合格数量。
-    - 上传的表格 **可选** 包含以下列：派工主题、产品型号、产品名称、订单编号、PDM图号。
+    - 根据《派工进度追踪表》，计算各个零件的在制情况。
+    - 上传的表格 **必须包含** 以下表格列：订单主题、派工主题、产品型号、派工数量、加工工序、合格数量。
     """)
 
     st.subheader("上传文件")
@@ -54,7 +53,7 @@ with tab1:
         with st.spinner("文件已上传，正在处理..."):
             try:
                 # 调用业务逻辑，返回XLSX和CSV字节流
-                xlsx_data, csv_data = process_dispatch_data(uploaded_file)
+                xlsx_data, csv_data, validation_warnings = process_dispatch_data(uploaded_file)
 
                 # 将XLSX字节流转为DataFrame用于展示，保留空行
                 df_result = pd.read_excel(io.BytesIO(xlsx_data), header=None, keep_default_na=False)
@@ -69,6 +68,11 @@ with tab1:
                 # 处理结果
                 st.subheader("处理结果")
                 st.success(f"✅ {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}: 数据处理已完成。")
+                if validation_warnings:
+                    st.warning("数据校验提示：发现同一派工主题对应了多个产品型号，请复核源表。")
+                    with st.expander("查看校验详情", expanded=True):
+                        for warning in validation_warnings:
+                            st.write(f"- {warning}")
 
                 # 下载处理结果
                 st.download_button(
@@ -93,8 +97,8 @@ with tab1:
                 with st.expander("错误日志", expanded=True):
                     st.code(error_detail)
 
-    # AI 提示词（页面底部）
-    st.subheader("AI 提示词")
+    # 输出标准（页面底部）
+    st.subheader("输出标准")
     st.code(PROMPT_CONTENT, language="markdown")
 
 with tab2:
