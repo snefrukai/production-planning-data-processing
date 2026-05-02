@@ -38,3 +38,25 @@ ruff format .
 ```
 
 当前环境常用 `uv run --no-project --managed-python --python 3.12 ...` 执行测试和工具。
+
+## Commit Message 约定
+
+提交信息使用 Conventional Commits：
+
+```text
+<type>(<scope>): <动作 + 对象 + 结果>
+```
+
+`script/` 仓库常用 scope：
+
+- `wip-analysis`：在制分析业务逻辑、输出格式、页面业务文案。
+- `dispatch`：派工数据解析、字段映射、计算逻辑。
+- `streamlit`：页面运行、上传交互、部署适配。
+- `test`：测试用例、测试数据、测试脚本。
+- `repo`：仓库边界、部署结构、协作约定。
+
+写法要求：
+
+- scope 写功能域，不写文件名。
+- description 写行为变化，不写 `update app`、`fix bug` 这类泛词。
+- 多个独立关注点分开提交。
