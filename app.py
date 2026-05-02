@@ -9,8 +9,8 @@ import streamlit as st
 # 导入处理函数
 from dispatch_processor import process_dispatch_data
 
-# 读取输出标准说明
-PROMPT_PATH = os.path.join(os.path.dirname(__file__), "..", "docs", "输出标准.md")
+# 读取输出标准说明。部署 script repo 时使用本地 docs，根 repo 运行时也保持一致。
+PROMPT_PATH = os.path.join(os.path.dirname(__file__), "docs", "输出标准.md")
 with open(PROMPT_PATH, encoding="utf-8") as f:
     PROMPT_CONTENT = f.read()
 
