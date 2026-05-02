@@ -21,8 +21,8 @@ __all__ = [
 # ---------------------------------------------------------------------------
 # 常量
 # ---------------------------------------------------------------------------
-REQUIRED_COLS = ["订单主题", "派工主题", "产品型号", "派工数量", "加工工序", "合格数量"]
-OPTIONAL_COLS = ["产品名称"]
+REQUIRED_COLS = ["派工主题", "产品型号", "派工数量", "加工工序", "合格数量"]
+OPTIONAL_COLS = ["订单主题", "产品名称"]
 logger = logging.getLogger(__name__)
 
 
@@ -342,9 +342,9 @@ def process_theme_group(
 
 
 def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.DataFrame:
-    """将处理后的产品型号列表构建为带动态表头的输出 DataFrame。
+    """将处理后的产品型号列表按工序序列构建为带动态表头的输出 DataFrame。
 
-    每个产品型号独立一个区块，共享该产品型号对应工序的表头。
+    相同工序序列的产品型号放在同一个输出区块，便于人工横向阅读。
 
     Args:
         processed_themes: 按产品型号分组处理好的 PartDispatchResult 对象列表.
@@ -352,9 +352,14 @@ def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.Dat
     Returns:
         生成的用于进一步导出 CSV 和 Excel 的 DataFrame 结构.
     """
+    route_blocks: dict[tuple[str, ...], list[PartDispatchResult]] = {}
+    for theme_result in processed_themes:
+        route_key = tuple(step.name for step in theme_result.steps)
+        route_blocks.setdefault(route_key, []).append(theme_result)
+
     all_rows: list[list[str | int]] = []
 
-    for t in processed_themes:
+    for route_steps, theme_results in route_blocks.items():
         # 表头行
         header: list[str | int] = [
             "产品型号",
@@ -364,25 +369,26 @@ def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.Dat
             "详细派工说明",
             "派工主题",
         ]
-        for step in t.steps:
-            header.append(step.name)
-            header.append(f"待{step.name}")
+        for step_name in route_steps:
+            header.append(step_name)
+            header.append(f"待{step_name}")
         all_rows.append(header)
 
         # 数据行
-        row: list[str | int] = [
-            t.pdm,
-            t.description,
-            t.in_progress_total,
-            t.dispatch_note,
-            t.dispatch_note_detail,
-            t.order_id,
-        ]
-        for step in t.steps:
-            qual = step.qualified
-            row.append(int(qual) if isinstance(qual, float) and qual.is_integer() else qual)  # type: ignore[arg-type]
-            row.append(step.pending)  # type: ignore[arg-type]
-        all_rows.append(row)
+        for t in theme_results:
+            row: list[str | int] = [
+                t.pdm,
+                t.description,
+                t.in_progress_total,
+                t.dispatch_note,
+                t.dispatch_note_detail,
+                t.order_id,
+            ]
+            for step in t.steps:
+                qual = step.qualified
+                row.append(int(qual) if isinstance(qual, float) and qual.is_integer() else qual)  # type: ignore[arg-type]
+                row.append(step.pending)  # type: ignore[arg-type]
+            all_rows.append(row)
 
         # 空行（区块分隔）
         all_rows.append([""] * len(header))
@@ -444,7 +450,7 @@ def process_dispatch_data(file_obj: IO[bytes]) -> tuple[bytes, bytes, list[str]]
     except Exception as e:
         raise ValueError(f"清洗数值列失败: {str(e)}") from e
 
-    # 7. 按产品型号分组处理。同一产品型号的不同派工主题汇总到同一个输出区块。
+    # 7. 按产品型号分组处理。同一产品型号的不同派工主题先汇总为一条产品记录。
     product_groups = _collect_product_group_indices(data, col_idx)
     processed_themes: list[PartDispatchResult] = []
     for product_model, row_indices in product_groups.items():

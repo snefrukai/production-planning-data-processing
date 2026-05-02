@@ -40,7 +40,7 @@ with tab1:
     st.subheader("功能说明")
     st.markdown("""
     - 根据《派工进度追踪表》，计算各个零件的在制情况。
-    - 上传的表格 **必须包含** 以下表格列：订单主题、派工主题、产品型号、派工数量、加工工序、合格数量。
+    - 上传的表格 **必须包含** 以下表格列：派工主题、产品型号、派工数量、加工工序、合格数量。
     """)
 
     st.subheader("上传文件")
@@ -52,8 +52,13 @@ with tab1:
     if uploaded_file is not None:
         with st.spinner("文件已上传，正在处理..."):
             try:
-                # 调用业务逻辑，返回XLSX和CSV字节流
-                xlsx_data, csv_data, validation_warnings = process_dispatch_data(uploaded_file)
+                # 调用业务逻辑，返回XLSX、CSV和前置校验提示；兼容旧部署的2返回值版本。
+                process_result = process_dispatch_data(uploaded_file)
+                if len(process_result) == 2:
+                    xlsx_data, csv_data = process_result
+                    validation_warnings = []
+                else:
+                    xlsx_data, csv_data, validation_warnings = process_result
 
                 # 将XLSX字节流转为DataFrame用于展示，保留空行
                 df_result = pd.read_excel(io.BytesIO(xlsx_data), header=None, keep_default_na=False)

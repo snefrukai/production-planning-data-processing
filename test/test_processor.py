@@ -221,6 +221,46 @@ class TestOutputValidation:
         assert "DD_001: 待落料 80" in str(row[detail_idx])
         assert "DD_002: 待落料 40" in str(row[detail_idx])
 
+    def test_same_process_route_products_share_one_output_block(self) -> None:
+        """验证相同工序序列的不同产品型号放在同一个数据区块"""
+        csv_content = "\n".join(
+            [
+                "派工主题,产品名称,产品型号,派工数量,加工工序,合格数量",
+                "DD_001,零件A,A001,100,【自制】,0",
+                ",零件A,A001,,落料,20",
+                ",零件A,A001,,包装,10",
+                "DD_002,零件B,B001,50,【自制】,0",
+                ",零件B,B001,,落料,15",
+                ",零件B,B001,,包装,5",
+            ]
+        )
+        mock_file = io.BytesIO(csv_content.encode("utf-8"))
+        mock_file.name = "test.csv"  # type: ignore[attr-defined]
+
+        _xlsx_data, csv_data, validation_warnings = process_dispatch_data(mock_file)  # type: ignore[arg-type]
+        assert validation_warnings == []
+
+        df = pd.read_csv(io.BytesIO(csv_data), header=None, keep_default_na=False)
+        header_rows = df[df[0] == "产品型号"]
+        assert len(header_rows) == 1
+
+        header_row = df.iloc[0].tolist()
+        assert header_row[:10] == [
+            "产品型号",
+            "产品名称",
+            "在制汇总",
+            "派工说明",
+            "详细派工说明",
+            "派工主题",
+            "落料",
+            "待落料",
+            "包装",
+            "待包装",
+        ]
+        assert df.iloc[1, 0] == "A001"
+        assert df.iloc[2, 0] == "B001"
+        assert df.iloc[3, 0] == ""
+
     def test_same_product_model_with_different_names_is_merged_by_model(self) -> None:
         """验证最终输出按产品型号分组，而不是按产品名称拆分"""
         csv_content = "\n".join(
