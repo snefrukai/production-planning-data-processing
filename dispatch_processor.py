@@ -21,7 +21,7 @@ __all__ = [
 # 常量
 # ---------------------------------------------------------------------------
 REQUIRED_COLS = ["订单主题", "派工数量", "加工工序", "合格数量"]
-OPTIONAL_COLS = ["订单编号", "PDM图号", "产品名称"]
+OPTIONAL_COLS = ["订单编号", "派工主题", "PDM图号", "产品名称", "产品型号"]
 
 
 # ---------------------------------------------------------------------------
@@ -88,7 +88,7 @@ def _resolve_pdm_and_desc(
     col_idx: dict[str, int],
     theme_value: str,
 ) -> tuple[str, str]:
-    """确定 PDM 图号和物料描述：优先使用文件列，否则从订单主题解析。
+    """确定图号和物料描述：优先使用文件列，否则从订单主题解析。
 
     Args:
         theme_group: 需要解析的订单主题对应的数据块 DataFrame.
@@ -101,7 +101,10 @@ def _resolve_pdm_and_desc(
     pdm = ""
     desc = ""
 
-    if "PDM图号" in col_idx:
+    if "产品型号" in col_idx:
+        pdm_values = theme_group[col_idx["产品型号"]].dropna().unique()
+        pdm = str(pdm_values[0]) if len(pdm_values) > 0 else ""
+    elif "PDM图号" in col_idx:
         pdm_values = theme_group[col_idx["PDM图号"]].dropna().unique()
         pdm = str(pdm_values[0]) if len(pdm_values) > 0 else ""
 
@@ -117,6 +120,25 @@ def _resolve_pdm_and_desc(
             desc = parsed_desc
 
     return pdm, desc
+
+
+def _normalize_order_id(value: object) -> str:
+    """从派工主题或订单编号中提取用于输出的订单编号。"""
+    text = str(value).strip()
+    if not text or text == "nan":
+        return ""
+
+    match = re.search(r"DD_[A-Za-z0-9]+", text)
+    return match.group(0) if match else text
+
+
+def _resolve_order_col(col_idx: dict[str, int]) -> int | None:
+    """订单编号优先来自派工主题，兼容旧文件的订单编号列。"""
+    if "派工主题" in col_idx:
+        return col_idx["派工主题"]
+    if "订单编号" in col_idx:
+        return col_idx["订单编号"]
+    return None
 
 
 def process_theme_group(
@@ -138,8 +160,13 @@ def process_theme_group(
     qty_col = col_idx["派工数量"]
     qual_col = col_idx["合格数量"]
 
-    # 订单编号（可选）
-    order_ids = " / ".join(str(v) for v in theme_group[col_idx["订单编号"]].unique()) if "订单编号" in col_idx else ""
+    # 订单编号（可选）：新文件从“派工主题”获取，旧文件兼容“订单编号”
+    order_col = _resolve_order_col(col_idx)
+    order_ids = (
+        " / ".join(order_id for order_id in (_normalize_order_id(v) for v in theme_group[order_col].unique()) if order_id)
+        if order_col is not None
+        else ""
+    )
 
     # PDM 图号 & 物料描述
     pdm, desc = _resolve_pdm_and_desc(theme_group, col_idx, theme_value)
@@ -180,11 +207,11 @@ def process_theme_group(
 
     # 构建详细派工说明：按订单编号逐条列出待处理工序
     detail_parts: list[str] = []
-    if "订单编号" in col_idx:
-        order_col = col_idx["订单编号"]
+    in_progress_total = 0
+    if order_col is not None:
         for oid in theme_group[order_col].unique():
-            oid_str = str(oid).strip()
-            if not oid_str or oid_str == "nan":
+            oid_str = _normalize_order_id(oid)
+            if not oid_str:
                 continue
             order_rows = theme_group[theme_group[order_col] == oid]
             order_dispatch = order_rows[order_rows[proc_col] == "【自制】"][qty_col].sum()
@@ -199,6 +226,7 @@ def process_theme_group(
                 bl = max(0, round(bl, 0))
                 if bl > 0:
                     detail_parts.append(f"{oid_str}: 待{proc} {int(bl)}")
+                    in_progress_total += int(bl)
                 prev = qual
 
     return PartDispatchResult(
@@ -207,6 +235,7 @@ def process_theme_group(
         pdm=pdm,
         description=desc,
         steps=steps,
+        in_progress_total=in_progress_total,
         dispatch_note="，".join(summary_parts),
         dispatch_note_detail="，".join(detail_parts),
     )
@@ -233,7 +262,7 @@ def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.Dat
 
     for seq, theme_list in blocks.items():
         # 表头行
-        header: list[str | int] = ["PDM图号", "物料描述", "派工说明", "详细派工说明", "订单主题", "订单编号"]
+        header: list[str | int] = ["PDM图号", "物料描述", "在制汇总", "派工说明", "详细派工说明", "订单主题", "订单编号"]
         for proc in seq:
             header.append(proc)
             header.append(f"待{proc}")
@@ -244,6 +273,7 @@ def build_output_dataframe(processed_themes: list[PartDispatchResult]) -> pd.Dat
             row: list[str | int] = [
                 t.pdm,
                 t.description,
+                t.in_progress_total,
                 t.dispatch_note,
                 t.dispatch_note_detail,
                 t.order_theme,
@@ -294,8 +324,8 @@ def process_dispatch_data(file_obj: IO[bytes]) -> tuple[bytes, bytes]:
     # 2. 识别表头
     col_idx, data_start_row = detect_headers(df, REQUIRED_COLS, OPTIONAL_COLS)
 
-    # 3. 向下填充（订单主题、订单编号）
-    for col_name in ("订单主题", "订单编号"):
+    # 3. 向下填充（订单主题、订单编号/派工主题）
+    for col_name in ("订单主题", "订单编号", "派工主题"):
         if col_name in col_idx:
             df[col_idx[col_name]] = df[col_idx[col_name]].ffill()
 

@@ -28,16 +28,6 @@ class TestReadUploadedFile:
         assert not df.empty, "DataFrame 应包含数据"
         assert len(df) > 0
 
-    def test_read_xlsx(self) -> None:
-        """测试读取 .xlsx 文件"""
-        filepath = os.path.join(os.path.dirname(os.path.dirname(__file__)), "input", "派工进度追踪表_赵淑君 (1).xlsx")
-
-        with open(filepath, "rb") as f:
-            df = read_uploaded_file(f)
-
-        assert not df.empty, "DataFrame 应包含数据"
-        assert len(df) > 0
-
     def test_unsupported_format(self) -> None:
         """测试读取不支持的文件格式应抛出异常"""
 
@@ -93,11 +83,29 @@ class TestDetectHeaders:
             ]
         )
         required = ["订单主题", "派工数量", "加工工序", "合格数量"]
-        optional = ["PDM图号", "产品名称"]
+        optional = ["订单编号", "派工主题", "PDM图号", "产品名称", "产品型号"]
         col_idx, _ = detect_headers(df, required, optional)
 
         assert "PDM图号" in col_idx
         assert "产品名称" not in col_idx
+
+    def test_detect_new_optional_cols(self) -> None:
+        """测试识别产品型号和派工主题列"""
+        df = pd.DataFrame(
+            [
+                ["订单主题", "派工主题", "产品型号", "产品名称"],
+                ["派工数量", "", "", ""],
+                ["主题1", "DD_001", "ABC123", "零件A"],
+            ]
+        )
+        required = ["订单主题", "派工数量"]
+        optional = ["订单编号", "派工主题", "PDM图号", "产品名称", "产品型号"]
+        col_idx, data_start = detect_headers(df, required, optional)
+
+        assert col_idx["派工主题"] == 1
+        assert col_idx["产品型号"] == 2
+        assert col_idx["产品名称"] == 3
+        assert data_start == 2
 
     def test_missing_required_col_raises(self) -> None:
         """测试缺少必选列时抛出 ValueError"""

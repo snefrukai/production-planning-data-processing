@@ -36,6 +36,7 @@ class PartDispatchResult:
         description: 物料描述 (如: "导线夹")
         dispatch_note: 派工说明（汇总） (如: "待三价彩锌：6000")
         dispatch_note_detail: 详细派工说明（按订单编号分列）
+        in_progress_total: 在制汇总（详细派工说明中的数量合计）
         order_id: 订单编号
         order_theme: 订单主题
         steps: 当前零件的所有工序列表
@@ -45,6 +46,7 @@ class PartDispatchResult:
     description: str
     dispatch_note: str
     dispatch_note_detail: str
+    in_progress_total: int
     order_id: str
     order_theme: str
     steps: list[ProcessStep]

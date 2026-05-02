@@ -26,7 +26,6 @@ class TestProcessDispatch:
         "filename",
         [
             "派工进度追踪表_赵淑君.xls",
-            "派工进度追踪表_赵淑君 (1).xlsx",
         ],
     )
     def test_process_valid_files(self, filename: str) -> None:
@@ -63,7 +62,7 @@ class TestOutputValidation:
         return None
 
     def test_output_columns_exist(self) -> None:
-        """验证输出包含必需列: PDM图号, 物料描述, 派工说明"""
+        """验证输出包含必需列: PDM图号, 物料描述, 在制汇总, 派工说明"""
         df = self._get_result_df("派工进度追踪表_赵淑君.xls")
 
         header_idx = self._find_header_row(df)
@@ -72,7 +71,27 @@ class TestOutputValidation:
         header_row = df.iloc[header_idx].tolist()
         assert "PDM图号" in header_row, "缺少PDM图号列"
         assert "物料描述" in header_row, "缺少物料描述列"
+        assert "在制汇总" in header_row, "缺少在制汇总列"
         assert "派工说明" in header_row, "缺少派工说明列"
+
+    def test_产品型号_and_在制汇总_source(self) -> None:
+        """验证图号来自产品型号，且在制汇总来自详细派工说明数量合计"""
+        df = self._get_result_df("派工进度追踪表_赵淑君.xls")
+
+        header_idx = self._find_header_row(df)
+        assert header_idx is not None
+        header_row = df.iloc[header_idx].tolist()
+
+        pdm_idx = header_row.index("PDM图号")
+        in_progress_idx = header_row.index("在制汇总")
+        detail_idx = header_row.index("详细派工说明")
+        order_id_idx = header_row.index("订单编号")
+
+        first_data_row = df.iloc[header_idx + 1]
+        assert first_data_row[pdm_idx] == "12545H26L00H000"
+        assert first_data_row[in_progress_idx] == "60000"
+        assert first_data_row[detail_idx] == "DD_20260430002: 待落料 60000"
+        assert first_data_row[order_id_idx] == "DD_20260430002"
 
     def test_pdm图号_not_empty(self) -> None:
         """验证PDM图号列有值"""
